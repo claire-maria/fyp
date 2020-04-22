@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.support.annotation.Dimension;
 import android.support.annotation.NonNull;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.app.ActivityCompat;
@@ -23,6 +24,7 @@ import android.graphics.drawable.Drawable;
 import java.lang.reflect.Array;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Formatter;
 import java.util.Random;
 import android.graphics.Canvas;
 import java.util.ArrayList;
@@ -83,7 +85,7 @@ public class DetectorYoloHTTP extends Detector {
     private final static int LISTSIZE=1000; // if change this then also change value in udp_socket_jni.c
     public static final String TAG = "MyActivity";
     private int outputWidth=300;
-    private int outputHW=500;
+    private int outputHW=50;
     private Mat mOutputROI;
 
     private boolean bpUpdated = false;
@@ -99,13 +101,15 @@ public class DetectorYoloHTTP extends Detector {
     private static final boolean DEBUGGING = false;  // generate extra debug output ?
     public static final int REQUEST_WRITE_EXTERNAL = 3;
 //    ArrayList<Bitmap> bitmaps = new ArrayList<>();
-    ArrayList<Bitmap> cocoData = new ArrayList<>();
+    ArrayList<Mat> croppedMatObjs = new ArrayList<>();
     ArrayList<Recognition> recArr = new ArrayList<>();
     ArrayList<Bitmap> coco = new ArrayList<>();
     ArrayList<Bitmap> cropped = new ArrayList<>();
+    ArrayList<Bitmap> croppedBitmaps = new ArrayList<>();
     ArrayList<ArrayList<Bitmap>> listOfCMBLists = new ArrayList<>();
     byte[] combined;
-    byte[] cmbJPEG;
+    byte[] tstSize;
+    byte[] cmbJpeg;
     int cmbH, cmbW;
     Rect origCords = new Rect();
     Bitmap temp;
@@ -118,6 +122,7 @@ public class DetectorYoloHTTP extends Detector {
     private native String sendmmsg(int fd, ByteBuffer req, int req_len, ByteBuffer img, int img_len, int MSS);
     private native int recv(int fd, ByteBuffer recvbuf, int len, int MSS);
     private Context context;
+    int delete;
 
     //private native void keepalive();
 
@@ -160,6 +165,10 @@ public class DetectorYoloHTTP extends Detector {
 
     public Detections recognizeImage(Image image, int rotation) {
 
+
+        android.graphics.Rect crop = image.getCropRect();
+        int format = image.getFormat();
+        delete = crop.width() * crop.height() *  ImageFormat.getBitsPerPixel(format)/8;
         if (image.getFormat() != ImageFormat.YUV_420_888) {
             // unsupported image format
             Logger.addln("\nWARN YoloHTTP.recognizeImage() unsupported image format");
@@ -171,12 +180,17 @@ public class DetectorYoloHTTP extends Detector {
 
     @Override
     public Detections recognize(byte[] yuv, int image_w, int image_h, int rotation) {
+
+
+        ArrayList<Bitmap> arr = new ArrayList<>();
+
         float aspectRatio;
         //Create bitmap for splitting
         //TODO: OPENCV OBJECT DETECTION ON PHONE, SHOULD BE FAST ENOUGH ON REAL PHONES
-
+        Bitmap temp = null;
         byte[] by = Transform.NV21toJPEG(yuv, image_w, image_h,100);
         Bitmap origialBitmap = BitmapFactory.decodeByteArray(by, 0, by.length);
+        Log.e("Wtff", String.valueOf(by.length));
 //        Bitmap[] quarters = splitBitmap(origialBitmap);
 //        Bitmap quarterUsed = quarters[0];
 
@@ -231,9 +245,10 @@ public class DetectorYoloHTTP extends Detector {
 //
 //            executed = true;
 //
+
         int[] drawables = new int[] {R.drawable.img0,R.drawable.img1, R.drawable.coco_val2014_000000001503, R.drawable.coco_val2014_000000001675,
-        R.drawable.coco_val2014_000000002592, R.drawable.coco_val2014_000000003703, R.drawable.coco_val2014_000000004795, R.drawable.coco_val2014_000000006608,
-        R.drawable.coco_val2014_000000008583,R.drawable.coco_val2014_000000009527, R.drawable.coco_val2014_000000011712};
+                R.drawable.coco_val2014_000000002592, R.drawable.coco_val2014_000000003703, R.drawable.coco_val2014_000000004795, R.drawable.coco_val2014_000000006608,
+                R.drawable.coco_val2014_000000008583,R.drawable.coco_val2014_000000009527, R.drawable.coco_val2014_000000011712};
         if(!executed) {
             Bitmap b = null;
             for (int i = 0; i < 10; i++) {
@@ -249,28 +264,37 @@ public class DetectorYoloHTTP extends Detector {
             executed = true;
         }
 
+        Bitmap testOne = saveCoco(R.drawable.singcrop);
+        testOne = getResizedBitmap(testOne,1000,1000);
+        byte[] convrgbtoyuv = Transform.convertRGBtoYUV(testOne);
+        combined = Transform.NV21toJPEG(convrgbtoyuv, 1000, 1000, comQuality);
+        image_h = 1000;
+        image_w = 1000;
+//        Log.e("WHYYYY", String.valueOf(testOne.getWidth()));
+//        combinedconvrgbtoyuv = bitmapToByteArray(testOne);
+
+//        combined = Transform.YUVtoJPEG(combined, testOne.getWidth(), testOne.getHeight(), comQuality);
+//        Bitmap bitmap = BitmapFactory.decodeByteArray(combined, 0, combined.length);
+//        saveBitmapToExternalStorage(bitmap);
 
         cropped.add(origialBitmap);
         Bitmap b = try2(cropped);
-        saveBitmapToExternalStorage(b);
+      //  saveBitmapToExternalStorage(b);
         cropped.remove(origialBitmap);
-        combined = bitmapToByteArray(b);
-        cmbJPEG = Transform.NV21toJPEG(combined, b.getWidth(), b.getHeight(), comQuality);
+////
+//        image_h = testOne.getHeight();
+//        image_w = testOne.getWidth();
+     //   combined = bitmapToByteArray(b);
+      //  cmbJPEG = Transform.NV21toJPEG(combined, b.getWidth(), b.getHeight(), comQuality);
+        int bh;
+        double bw;
+//        image_h = 414;
+//        bw = 480.3123993558776167471819645732689210950080515297906602254;
+
+      //  Log.e("MVP", "Height:  " + bh + " Width:  " + bw + " Size:  " + combined.length);
 
 
-
-//         Bitmap ori = null;
-//         ori = objectDet(origialBitmap, outputHW, outputHW);
-//         cropped.add(ori);
-//         Bitmap temp = null;
-//         temp = try2(cropped);
-//         saveBitmapToExternalStorage(temp);
-//         cropped.remove(ori);
-//        cropped.add(ori);
-//        Bitmap tmp = null;
-//
-//        cropped.remove(ori);
-
+      //  Log.e("SZ","Size  " + String.valueOf(send.length) + " Wid   " + ww + " Hei   " + hh);
         // takes yuv byte array as input
         Detections detects = new Detections();
 
@@ -279,13 +303,12 @@ public class DetectorYoloHTTP extends Detector {
         int isYUV;
         image_bytes.clear();
         if (comQuality>0) {
-
             // we do rotation server-side, android client too slow (takes around 10ms in both java
             // and c on Huawei P9, while jpeg compressiovoidn takes around 8ms).
             try {
-                image_bytes.put(Transform.YUVtoJPEG(yuv, image_w, image_h, comQuality));
-               // image_bytes.put(cmbJPEG);
+               // image_bytes.put(Transform.NV21toJPEG(combined, image_w, image_h, comQuality));
 
+                image_bytes.put(combined);
                 isYUV = 0;
             } catch (Exception e) {
                 // most likely encoded image is too big for image_bytes buffer
@@ -294,13 +317,29 @@ public class DetectorYoloHTTP extends Detector {
             }
         } else {
             // send image uncompressed
-            image_bytes.put(yuv);
+            image_bytes.put(combined);
             isYUV=1;
         }
  //       byte[] r = Transform.NV21toJPEG(yuv, image_w, image_h, 100);
+        //TODO: What the fuck is it even seeing????????
+//        byte[] killme = Transform.NV21toJPEG(yuv, image_w, image_h, comQuality);
+//        Formatter formatter = new Formatter();
+//        for (byte bb : killme) {
+//            formatter.format("%02x", bb);
+//        }
+//        String hex = formatter.toString();
+//        Log.e("DEL", hex);
+
+
+//        byte[] testAfter = new byte[image_bytes.remaining()];
+//        image_bytes.get(testAfter);
+
+//        saveBitmapToExternalStorage(bitmap);
+
+
 
         detects.addTiming("yuvtoJPG",Logger.tockLong("yuvtoJPG"));
-
+        Log.e("imgby", "After  " + String.valueOf(image_bytes.array()[0]));
         int dst_w=image_w, dst_h=image_h;
         if ((rotation%180 == 90) || (rotation%180 == -90)) {
             dst_w = image_h; dst_h = image_w;
@@ -457,6 +496,7 @@ public class DetectorYoloHTTP extends Detector {
                         Math.min(dst_h - 1, y + h / 2));  // bottom
 
 
+
                 viewToFrameTransform.mapRect(location); // map boxes back to original image coords
                 Recognition result = new Recognition(title, confidence, location, new Size(image_w, image_h));
                 detects.results.add(result);
@@ -522,7 +562,7 @@ public class DetectorYoloHTTP extends Detector {
     public static void saveBitmapToExternalStorage(Bitmap b){
         try {
             String root = Environment.getExternalStorageDirectory().toString();
-            File myDir = new File(root + "/FINDCORNERS3");
+            File myDir = new File(root + "/whatIsServerSeeingUmbrella10??");
             myDir.mkdirs();
             Random generator = new Random();
             int n = 10000;
@@ -542,16 +582,16 @@ public class DetectorYoloHTTP extends Detector {
                 Log.e("HELP", "Nope");
             }
     }
-    private void removeDuplicates(ArrayList<Bitmap> coco){
-        for(int i = 0 ; i < coco.size() ; i++){
-            for(int j = 1 ; j < coco.size() ; j++){
-                String s1 = String.valueOf(coco.get(i).getByteCount());
-                String s2 = String.valueOf(coco.get(j).getByteCount());
+    private void removeDuplicates(ArrayList<Bitmap> arr){
+        for(int i = 0 ; i < arr.size() ; i++){
+            for(int j = 1 ; j < arr.size() ; j++){
+                String s1 = String.valueOf(arr.get(i).getByteCount());
+                String s2 = String.valueOf(arr.get(j).getByteCount());
                 if(!s1.equals(s2)){
                     Log.e("Lmao", "Non Duplicate: ");
                 }
                 else{
-                    Log.e("Lmao", "Duplicate Location: " );
+                    arr.remove(j);
                 }
             }
         }
@@ -614,19 +654,29 @@ public class DetectorYoloHTTP extends Detector {
     }
     public Bitmap tryLists(ArrayList<ArrayList<Bitmap>> bitmap){
         //TODO ADD B IN RANDOM SPOT
-        int totalSize =  (bitmap.get(0).size() + bitmap.get(1).size());
-        int w = outputHW * totalSize, h = outputHW * totalSize;
-        Bitmap bigbitmap    = Bitmap.createBitmap(w/2, h/2, Bitmap.Config.ARGB_8888);
+        Bitmap bitm = null;
+        int totalSize = 0;
+        for(int n = 0 ; n < bitmap.size() ; n++){
+            removeDuplicates(bitmap.get(n));
+            totalSize += bitmap.get(n).size();
+        }
+
+        Log.e("SizeCheck", String.valueOf(totalSize));
+        int w = outputHW * totalSize, h = outputHW*10;
+        Bitmap bigbitmap    = Bitmap.createBitmap(w/10, h, Bitmap.Config.ARGB_8888);
         Canvas bigcanvas    = new Canvas(bigbitmap);
 
         Paint paint = new Paint();
         int iWidth = 0;
         int iHeight = 0;
         Bitmap bmp;
-        for (int i = 0; i < bitmap.size(); i++) {
-            for (int j = 0; j < bitmap.get(i).size(); j++) {
+        ArrayList myList;
+        for(int i = 0; i < bitmap.size(); i++){
+
+            for(int j = 0; j < bitmap.get(i).size(); j++){
                 bmp = bitmap.get(i).get(j);
-                if(iWidth < 1000) {
+                bmp = getResizedBitmap(bmp, outputHW,outputHW);
+                if(iWidth < w/10) {
                     bigcanvas.drawBitmap(bmp, iWidth , iHeight, paint);
                     iWidth += bmp.getWidth();
 
@@ -636,8 +686,27 @@ public class DetectorYoloHTTP extends Detector {
                     bigcanvas.drawBitmap(bmp, iWidth, iHeight, paint);
                     iHeight += bmp.getHeight();
                 }
+
             }
+
         }
+//        for (int i = 0; i < bitmap.size(); i++) {
+//            for (int j = 0; j < bitmap.get(i).size(); j++) {
+//                removeDuplicates(bitmap.get(i));
+//                bmp = bitmap.get(i).get(j);
+//                bmp = getResizedBitmap(bmp, outputHW,outputHW);
+//                if(iWidth < w/2) {
+//                    bigcanvas.drawBitmap(bmp, iWidth , iHeight, paint);
+//                    iWidth += bmp.getWidth();
+//
+//                }
+//                else {
+//                    iWidth = 0;
+//                    bigcanvas.drawBitmap(bmp, iWidth, iHeight, paint);
+//                    iHeight += bmp.getHeight();
+//                }
+//            }
+
         return bigbitmap;
     }
 
@@ -647,6 +716,7 @@ public class DetectorYoloHTTP extends Detector {
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
         byte[] byteArray = stream.toByteArray();
         return byteArray;
+
     }
     public Bitmap[] splitBitmap(Bitmap picture)
     {
@@ -672,9 +742,10 @@ public class DetectorYoloHTTP extends Detector {
         matrix.postScale(scaleWidth, scaleHeight);
 
         // "RECREATE" THE NEW BITMAP
+   //     Bitmap resizedBitmap = Bitmap.createScaledBitmap(bm, 640,480, true);
         Bitmap resizedBitmap = Bitmap.createBitmap(
-                bm, 0, 0, width, height, matrix, false);
-//        bm.recycle();
+                bm, 0, 0, width, height, matrix, true);
+    //    bm.recycle();
         return resizedBitmap;
     }
 
@@ -740,7 +811,8 @@ public Bitmap objectDet(Bitmap b, int bWid , int bHei){
 }
 
 
-    public Bitmap objectDetforOrig(Bitmap b, int bWid , int bHei){
+    public ArrayList<Bitmap> objectDetforArray(Bitmap b, int bWid , int bHei){
+        ArrayList<Bitmap> DetectionsCropped = new ArrayList<>();
         Mat srcMat = new Mat (bHei, bWid, CvType.CV_8U, new Scalar(4));
         Mat gray = new Mat (bHei, bWid, CvType.CV_8U, new Scalar(4));
         Mat clone = srcMat.clone();
@@ -750,57 +822,86 @@ public Bitmap objectDet(Bitmap b, int bWid , int bHei){
 //THIS IS CONTOUR DETECTION
         Imgproc.cvtColor(srcMat, gray, Imgproc.COLOR_RGBA2GRAY);
         Imgproc.GaussianBlur(gray,gray,new org.opencv.core.Size(13,13),2,2);
-//        Imgproc.threshold(gray, gray, 120, 255,Imgproc.THRESH_BINARY);
-//        Imgproc.Canny(gray,gray,50,150);
-//        // apply erosion and dilation
-//        Imgproc.dilate(gray, gray, Mat.ones(new org.opencv.core.Size(5, 5), CvType.CV_8UC1));
-//        Imgproc.erode(gray, gray, Mat.ones(new org.opencv.core.Size(5, 5), CvType.CV_8UC1));
-////ffind and draw contours
-//        ArrayList<MatOfPoint> contours = new ArrayList<MatOfPoint>();
-//        Mat hierarchy = new Mat();
-//        //find contours:
-//        Imgproc.findContours(gray, contours, hierarchy, Imgproc.RETR_TREE,Imgproc.CHAIN_APPROX_SIMPLE);
-//
-//
-//        double contSize = 0;
-//        MatOfPoint2f  approxCurve = new MatOfPoint2f();
-//
-//        for(int i = 0 ; i < contours.size() ; i++){
-//            contSize = Imgproc.contourArea(contours.get(i));
-//            if(contSize > 3000){
-//                //Convert contours(i) from MatOfPoint to MatOfPoint2f
-//                MatOfPoint2f contour2f = new MatOfPoint2f( contours.get(i).toArray() );
-//                //Processing on mMOP2f1 which is in type MatOfPoint2f
-//                double approxDistance = Imgproc.arcLength(contour2f, true)*0.02;
-//                Imgproc.approxPolyDP(contour2f, approxCurve, approxDistance, true);
-//                //Convert back to MatOfPoint
-//                MatOfPoint points = new MatOfPoint( approxCurve.toArray() );
-//                // Get bounding rect of contour
-//                Rect rect = Imgproc.boundingRect(points);
-//
-//
-//                // draw enclosing rectangle (all same color, but you could use variable i to make them unique)
-//                //  Imgproc.rectangle(srcMat,new Point(rect.x,rect.y), new Point(rect.x+rect.width,rect.y+rect.height), new Scalar(0,255,0), 3);
-//                //Now to crop
-//                Rect rectCrop = new Rect(rect.x, rect.y , rect.width, rect.height);
-//                origCords = new Rect(rect.x, rect.y , rect.width, rect.height);
-//                result = srcMat.submat(rectCrop);
+        Imgproc.threshold(gray, gray, 120, 255,Imgproc.THRESH_BINARY);
+        Imgproc.Canny(gray,gray,50,150);
+        // apply erosion and dilation
+        Imgproc.dilate(gray, gray, Mat.ones(new org.opencv.core.Size(5, 5), CvType.CV_8UC1));
+        Imgproc.erode(gray, gray, Mat.ones(new org.opencv.core.Size(5, 5), CvType.CV_8UC1));
+//ffind and draw contours
+        ArrayList<MatOfPoint> contours = new ArrayList<MatOfPoint>();
+        Mat hierarchy = new Mat();
+        //find contours:
+        Imgproc.findContours(gray, contours, hierarchy, Imgproc.RETR_TREE,Imgproc.CHAIN_APPROX_SIMPLE);
 
 
-                //cropped.add(bmp);
+        double contSize = 0;
+        MatOfPoint2f  approxCurve = new MatOfPoint2f();
+
+        for(int i = 0 ; i < contours.size() ; i++){
+            contSize = Imgproc.contourArea(contours.get(i));
+            if(contSize > 3000){
+                //Convert contours(i) from MatOfPoint to MatOfPoint2f
+                MatOfPoint2f contour2f = new MatOfPoint2f( contours.get(i).toArray() );
+                //Processing on mMOP2f1 which is in type MatOfPoint2f
+                double approxDistance = Imgproc.arcLength(contour2f, true)*0.02;
+                Imgproc.approxPolyDP(contour2f, approxCurve, approxDistance, true);
+                //Convert back to MatOfPoint
+                MatOfPoint points = new MatOfPoint( approxCurve.toArray() );
+                // Get bounding rect of contour
+                Rect rect = Imgproc.boundingRect(points);
 
 
+                // draw enclosing rectangle (all same color, but you could use variable i to make them unique)
+                //  Imgproc.rectangle(srcMat,new Point(rect.x,rect.y), new Point(rect.x+rect.width,rect.y+rect.height), new Scalar(0,255,0), 3);
+                //Now to crop
+                Rect rectCrop = new Rect(rect.x, rect.y , rect.width, rect.height);
+                result = srcMat.submat(rectCrop);
+                Bitmap bitmap = Bitmap.createBitmap(result.cols(), result.rows(), Bitmap.Config.ARGB_8888);
+                Utils.matToBitmap(result, bitmap);
+                DetectionsCropped.add(bitmap);
+
+            }
+        }
 
 
-        Bitmap bitmap = Bitmap.createBitmap(gray.cols(), gray.rows(), Bitmap.Config.ARGB_8888);
-        Utils.matToBitmap(result, bitmap);
-
-
-        return bitmap;
+        return DetectionsCropped;
         //  return cropped;
     }
 
+    public Bitmap resizeImageForImageView(Bitmap bitmap) {
+        int width = 640;
+        int height = 480;
+        Bitmap background = Bitmap.createBitmap((int) width, (int) height, Bitmap.Config.ARGB_8888);
 
+        float originalWidth = bitmap.getWidth();
+        float originalHeight = bitmap.getHeight();
+
+        Canvas canvas = new Canvas(background);
+
+        float scale = width / originalWidth;
+
+        float xTranslation = 0.0f;
+        float yTranslation = (height - originalHeight * scale) / 2.0f;
+
+        Matrix transformation = new Matrix();
+        transformation.postTranslate(xTranslation, yTranslation);
+        transformation.preScale(scale, scale);
+
+        Paint paint = new Paint();
+        paint.setFilterBitmap(true);
+
+        canvas.drawBitmap(bitmap, transformation, paint);
+
+        return background;
+    }
+
+    public Bitmap actuallyKillMe(Bitmap b){
+        int reqWidth = 640;
+        int reqHeight = 480;
+        Matrix m = new Matrix();
+        m.setRectToRect(new RectF(0, 0, b.getWidth(), b.getHeight()), new RectF(0, 0, reqWidth, reqHeight), Matrix.ScaleToFit.CENTER);
+        return Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, true);
+    }
 
 
 }
